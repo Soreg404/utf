@@ -2,6 +2,7 @@
 #ifndef _UTF_H
 #define _UTF_H
 #include <stdint.h>
+#include <string.h>
 
 #define UTF_API extern "C"
 
@@ -62,10 +63,7 @@ UTF_API inline UTF_RESULT utf_is_valid(char32_t codepoint) {
 
 
 
-
 #ifdef UTF_IMPLEMENTATION
-
-#include <memory>
 
 UTF_API UTF_Point utf8_decode(const void *s) {
 	const char *stream_beg = static_cast<const char *>(s);
@@ -112,6 +110,7 @@ UTF_API UTF_Point utf8_decode(const void *s) {
 
 	return ret;
 }
+
 
 UTF_API UTF_Point utf16_decode(const void *s, UTF_BOM en) {
 	const uint8_t *stream_beg = static_cast<const uint8_t *>(s);
@@ -184,6 +183,7 @@ UTF_API UTF_Point utf32LE_decode(const void *s) {
 }
 
 
+
 UTF_API UTF_Point utf8_encode(char32_t codepoint) {
 	UTF_Point ret;
 	ret.codepoint = codepoint;
@@ -221,6 +221,7 @@ UTF_API UTF_Point utf8_encode(char32_t codepoint) {
 
 	return ret;
 }
+
 
 UTF_API UTF_Point utf16_encode(char32_t codepoint, UTF_BOM en) {
 	UTF_Point ret;

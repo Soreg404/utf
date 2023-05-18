@@ -107,6 +107,7 @@ int main() {
 			print_byte(mode == 1, inp_pos_by == i, static_cast<unsigned>(bytes_buffer[i]));
 		}
 
+		printf(u8"\n\n ↵ enter to switch\n\n");
 
 		int c = _getch();
 		if(c == 0 || c == 0xE0)
@@ -210,10 +211,10 @@ void print_codepoint(char32_t currCodepoint) {
 		u32le = utf32LE_encode(currCodepoint);
 
 	if(currCodepoint < 32 || u8.result == UTF_ILLEGAL_CODEPOINT)
-		printf("\n [?] %s", u8.result == UTF_ILLEGAL_CODEPOINT ? "(illegal)" : "");
+		printf("\n [?] %s", u8.result == UTF_ILLEGAL_CODEPOINT ? "(illegal codepoint)" : "");
 	else
 		printf("\n [%.*s]", u8.num_bytes, u8.bytes);
-	clfw(30);
+	clfw(40);
 	printf("\n\n");
 
 	auto print_point = [](const char *label, const UTF_Point *p) {
