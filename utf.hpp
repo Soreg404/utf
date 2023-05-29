@@ -1,3 +1,12 @@
+/*
+
+Copyright (c) 2023 Stanisław Darowski
+
+This project is licensed under the terms of the MIT license.
+Full license is at the end of file.
+
+*/
+
 #pragma once
 #ifndef _UTF_H
 #define _UTF_H
@@ -45,6 +54,15 @@ UTF_API UTF_Point utf32_decode(const void *stream_beg, UTF_BOM en);
 UTF_API UTF_Point utf32LE_decode(const void *stream_beg);
 UTF_API UTF_Point utf32BE_decode(const void *stream_beg);
 
+UTF_API inline UTF_Point utf_decode(const void *stream_beg, UTF_TYPE type, UTF_BOM bom) {
+	switch(type) {
+		case UTF8: return utf8_decode(stream_beg);
+		case UTF16: return utf16_decode(stream_beg, bom);
+		case UTF32: return utf32_decode(stream_beg, bom);
+		default: return {};
+	}
+}
+
 
 UTF_API UTF_Point utf8_encode(char32_t codepoint);
 
@@ -56,9 +74,18 @@ UTF_API UTF_Point utf32_encode(char32_t codepoint, UTF_BOM en);
 UTF_API UTF_Point utf32BE_encode(char32_t codepoint);
 UTF_API UTF_Point utf32LE_encode(char32_t codepoint);
 
+UTF_API inline UTF_Point utf_encode(char32_t codepoint, UTF_TYPE type, UTF_BOM bom) {
+	switch(type) {
+		case UTF8: return utf8_encode(codepoint);
+		case UTF16: return utf16_encode(codepoint, bom);
+		case UTF32: return utf32_encode(codepoint, bom);
+		default: return {};
+	}
+}
 
-UTF_API inline UTF_RESULT utf_is_valid(char32_t codepoint) {
-	return (codepoint <= 0x10FFFF && ((codepoint & 0xFC00) != 0xD800)) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
+
+UTF_API inline bool utf_is_valid_cp(char32_t codepoint) {
+	return codepoint <= 0x10FFFF && ((codepoint & 0xFC00) != 0xD800);
 }
 
 
@@ -68,45 +95,55 @@ UTF_API inline UTF_RESULT utf_is_valid(char32_t codepoint) {
 UTF_API UTF_Point utf8_decode(const void *s) {
 	const char *stream_beg = static_cast<const char *>(s);
 	UTF_Point ret;
-	auto set_bytes = [&](uint8_t num_words) {
-		ret.num_bytes = ret.num_words = num_words;
-		memcpy(ret.bytes, stream_beg, num_words);
-	};
+	UTF_Point *debug_pointer_cuz_vs_sucks = &ret;
 
 	switch(*stream_beg & 0xC0) {
 		case 0x00:
 		case 0x40:
 			// ascii
+			ret.num_words = 1;
 			ret.codepoint = static_cast<char32_t>(*stream_beg);
-			goto return_one_word;
+			break;
 		case 0x80:
 			ret.result = UTF_UNEXPECTED_CONTINUATION;
-		return_one_word:
-			set_bytes(1);
-			return ret;
-	}
+			ret.num_words = 1;
+			ret.codepoint = 0;
+			break;
+		default:
+		{
+			uint8_t expWords = 2;
+			for(; expWords < 7 && (*stream_beg << expWords) & 0x80; expWords++);
 
-	uint8_t expWords = 2;
-	for(; expWords < 7 && (*stream_beg << expWords) & 0x80; expWords++);
+			ret.codepoint = *stream_beg & (0xff >> (expWords + 1));
 
-	size_t data = *stream_beg & (0xff >> (expWords + 1));
+			for(ret.num_words = 1; ret.num_words < expWords; ret.num_words++) {
+				if(stream_beg[ret.num_words] == 0 || (stream_beg[ret.num_words] & 0xC0) != 0x80) {
+					ret.codepoint = 0;
+					ret.result = UTF_TOO_FEW_WORDS;
+					break;
+				}
+				ret.codepoint <<= 6;
+				ret.codepoint |= stream_beg[ret.num_words] & 0x3f;
+			}
 
-	// TODO: detect overlong
+			if(ret.num_words == 1 || ret.result == UTF_TOO_FEW_WORDS) break;
 
-	for(uint8_t i = 1; i < expWords; i++) {
-		if(stream_beg[i] == 0 || (stream_beg[i] & 0xC0) != 0x80) {
-			ret.result = UTF_TOO_FEW_WORDS;
-			set_bytes(i);
-			return ret;
+			// detect overlong
+			// idea: if you can fit the codepoint in one less word - then its overlong
+			
+			// total available bits for one less word
+			size_t n = ret.num_words - 1;
+			size_t avl_bits = n == 1 ? 7 : (6 * (n - 1) + (7 - n));
+
+			size_t overlong_mask = (~static_cast<size_t>(0)) << avl_bits;
+			if((ret.codepoint & overlong_mask) == 0) ret.result = UTF_OVERLONG;
+
+			else if(!utf_is_valid_cp(ret.codepoint)) ret.result = UTF_ILLEGAL_CODEPOINT;
 		}
-		data <<= 6;
-		data |= stream_beg[i] & 0x3f;
 	}
 
-	ret.codepoint = static_cast<char32_t>(data);
-	ret.result = utf_is_valid(ret.codepoint);
-	
-	set_bytes(expWords);
+	ret.num_bytes = ret.num_words;
+	memcpy(ret.bytes, stream_beg, ret.num_bytes);
 
 	return ret;
 }
@@ -134,7 +171,8 @@ UTF_API UTF_Point utf16_decode(const void *s, UTF_BOM en) {
 			if((W[1] & 0xfc00) != 0xdc00) {
 				ret.result = UTF_TOO_FEW_WORDS;
 				ret.num_words = 1;
-			} else {
+			}
+			else {
 				ret.num_words = 2;
 				ret.codepoint = ((W[0] & 0x3ff) << 10) + (W[1] & 0x3ff) + 0x10000;
 			}
@@ -170,7 +208,7 @@ UTF_API UTF_Point utf32_decode(const void *s, UTF_BOM en) {
 	memcpy(ret.bytes, stream_beg, ret.num_bytes);
 	for(int i = 0; i < 4; i++)
 		ret.codepoint |= static_cast<char32_t>(stream_beg[en == UTF_BE ? 3 - i : i]) << i * 8;
-	ret.result = utf_is_valid(ret.codepoint);
+	ret.result = utf_is_valid_cp(ret.codepoint) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
 	return ret;
 }
 
@@ -187,7 +225,7 @@ UTF_API UTF_Point utf32LE_decode(const void *s) {
 UTF_API UTF_Point utf8_encode(char32_t codepoint) {
 	UTF_Point ret;
 	ret.codepoint = codepoint;
-	ret.result = utf_is_valid(codepoint);
+	ret.result = utf_is_valid_cp(codepoint) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
 
 	if(codepoint < 0x80) {
 		ret.num_bytes = ret.num_words = 1;
@@ -229,13 +267,14 @@ UTF_API UTF_Point utf16_encode(char32_t codepoint, UTF_BOM en) {
 	ret.codepoint = codepoint;
 	ret.type = UTF16;
 	ret.bom = en;
-	ret.result = utf_is_valid(codepoint);
+	ret.result = utf_is_valid_cp(codepoint) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
 
 	wchar_t W[2];
 	if(codepoint < 0x10000) {
 		ret.num_words = 1;
 		W[0] = codepoint & 0xffff;
-	} else {
+	}
+	else {
 		ret.num_words = 2;
 		codepoint -= 0x10000;
 		W[0] = 0xD800 + (codepoint >> 10);
@@ -245,8 +284,8 @@ UTF_API UTF_Point utf16_encode(char32_t codepoint, UTF_BOM en) {
 	ret.num_bytes = ret.num_words * 2;
 	for(int i = 0; i < 2; i++) {
 		uint8_t hibyte = W[i] >> 8, lobyte = W[i] & 0xff;
-		ret.bytes[i * 2]		= (en == UTF_BE) ? hibyte : lobyte;
-		ret.bytes[i * 2 + 1]	= (en == UTF_BE) ? lobyte : hibyte;
+		ret.bytes[i * 2] = (en == UTF_BE) ? hibyte : lobyte;
+		ret.bytes[i * 2 + 1] = (en == UTF_BE) ? lobyte : hibyte;
 	}
 	return ret;
 }
@@ -268,7 +307,7 @@ UTF_API UTF_Point utf32_encode(char32_t codepoint, UTF_BOM en) {
 	ret.bom = en;
 	ret.num_words = 1;
 	ret.num_bytes = 4;
-	ret.result = utf_is_valid(codepoint);
+	ret.result = utf_is_valid_cp(codepoint) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
 	for(int i = 0; i < 4; i++)
 		ret.bytes[en == UTF_BE ? i : 3 - i] = static_cast<uint8_t>(codepoint >> i * 8);
 	return ret;
@@ -285,3 +324,28 @@ UTF_API UTF_Point utf32LE_encode(char32_t codepoint) {
 #endif // UTF_IMPLEMENTATION
 
 #endif // _UTF_H
+
+
+/*
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/

@@ -243,15 +243,13 @@ void print_bytes() {
 	printf("\n\n\n");
 
 	auto print_point = [](const char *label, const UTF_Point *p) {
-		printf(" %s: %s", label, utf_result_str(p->result));
+		printf(" %s (%hhu): %s", label, p->num_words, utf_result_str(p->result));
 		clfw(50);
 		printf("\n");
 		if(p->codepoint < 0x20 || p->result == UTF_ILLEGAL_CODEPOINT)
 			printf("  0x%.8X  [?]", p->codepoint);
 		else {
-			UTF_Point convu8 = *p;
-			if(p->type != UTF8)
-				convu8 = utf8_encode(p->codepoint);
+			UTF_Point convu8 = utf8_encode(p->codepoint);
 			printf("  0x%.8X  [%.*s]", p->codepoint, convu8.num_bytes, convu8.bytes);
 		}
 		clfw(10);

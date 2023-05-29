@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="demo_windows.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utf.hpp" />
