@@ -309,7 +309,7 @@ UTF_API UTF_Point utf32_encode(char32_t codepoint, UTF_BOM en) {
 	ret.num_bytes = 4;
 	ret.result = utf_is_valid_cp(codepoint) ? UTF_OK : UTF_ILLEGAL_CODEPOINT;
 	for(int i = 0; i < 4; i++)
-		ret.bytes[en == UTF_BE ? i : 3 - i] = static_cast<uint8_t>(codepoint >> i * 8);
+		ret.bytes[en == UTF_BE ? 3 - i : i] = static_cast<uint8_t>(codepoint >> i * 8);
 	return ret;
 }
 
