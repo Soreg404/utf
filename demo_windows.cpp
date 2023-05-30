@@ -36,6 +36,8 @@ uint8_t bytes_buffer[8]{ 0 };
 void print_bytes();
 
 
+int utf_run_tests();
+
 const char *utf_result_str(UTF_RESULT r) {
 	switch(r) {
 		case UTF_OK: return "ok";
@@ -47,10 +49,13 @@ const char *utf_result_str(UTF_RESULT r) {
 	}
 }
 
-
-int main() {
+int main(int argc, const char *argv[]) {
 
 	SetConsoleOutputCP(65001);
+
+	printf("run tests? (y)\n");
+	if(_getch() == 'y')
+		return utf_run_tests();
 
 	baseCurPos = getCurPos().cur;
 	{
